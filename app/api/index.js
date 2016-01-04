@@ -2,9 +2,37 @@ var _ 		   = require('lodash');
 var api 	   = require('express').Router(); 
 var bodyParser = require('body-parser'); 
 var db 		   = require('../lib/db'); 
+var auth 	   = require('../lib/auth'); 
+var login      = require('./login'); 
 
 api.use(bodyParser.urlencoded({ extended: false })); 
 api.use(bodyParser.json()); 
+
+var authRequired = function(req,res,next){
+	var token = req.query.access_token || req.body.access_token || null; 
+	
+	if( ! token ) 
+		return res.status(401).json({
+			error: 'no access token provided'
+		}); 
+
+	auth
+		.checkAccessToken(token)
+		.then(function(user){
+			if( ! user ) 
+				return res.status(401).json({
+					error: 'no valid access token'
+				}); 
+
+			req._currentUser = user; 
+			next(); 	
+		})
+		.catch(function(err){
+			res.status(500).json({
+				error: 'internal server error'
+			}); 
+		}); 
+}; 
 
 api.use(function(req,res,next){
 	res.set('Content-type', 'application/json'); 
@@ -14,6 +42,12 @@ api.use(function(req,res,next){
 api.get('/', function(req,res){
 	res.send('api main');  
 });
+
+api.post('/auth', login);  
+
+api.get('/user', [authRequired], function(req,res){
+	res.send(req._currentUser); 
+}); 
 
 api.get('/users', function(req,res){
 	db
@@ -30,7 +64,7 @@ api.get('/users', function(req,res){
 	  }); 	
 }); 
 
-api.get('/users/:userId/posts', function(req,res){
+api.get('/users/:userId/posts', [authRequired], function(req,res){
 	var userId 	 = req.params.userId || null; 
 	var earliest = req.query.fromDate  || '0'; 
 	var latest   = req.query.toDate    || db.raw('NOW()'); 
@@ -111,6 +145,5 @@ api.post('/post', function(req,res){
     	})
 
 }); 
-
 
 module.exports = api; 
