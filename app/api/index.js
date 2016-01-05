@@ -4,6 +4,7 @@ var bodyParser = require('body-parser');
 var db 		   = require('../lib/db'); 
 var auth 	   = require('../lib/auth'); 
 var login      = require('./login'); 
+var postRoutes = require('./posts'); 
 
 api.use(bodyParser.urlencoded({ extended: false })); 
 api.use(bodyParser.json()); 
@@ -44,6 +45,7 @@ api.get('/', function(req,res){
 });
 
 api.post('/auth', login);  
+api.use('/posts', [authRequired], postRoutes); 
 
 api.get('/user', [authRequired], function(req,res){
 	res.send(req._currentUser); 
@@ -98,52 +100,5 @@ api.get('/users/:userId/posts', [authRequired], function(req,res){
 		}); 	
 });
 
-api.post('/post', function(req,res){
-	var userId    = req.body.user_id || null; 
-	var happiness = req.body.happiness || null; 
-	var comment   = req.body.comment || null;  
-
-    if( ! userId || ! happiness ) 
-    	return res.status(400).json({
-    		error: 'invalid request, required parameters missing'
-    	}); 
-
-    db('posts')
-    	.count('id as posts')
-    	.where('user_id', userId)
-    	.andWhere(db.raw("created_at >= DATE_FORMAT(NOW(), '%Y-%m-%d')"))
-    	.then(function(madeToday){
-    		var postedToday = _.first(madeToday).posts; 
-
-    		if( postedToday >= 1) 
-    			return res.status(409).json({
-    				error: 'already posted today'
-    			}); 
-
-    		return db
-				.insert({
-    				user_id	 : userId, 
-    				happiness: happiness, 
-    				comment	 : comment
-    		  	})
-    		  	.into('posts')
-    		  	.then(function(postId){
-    				console.log('new status post acquired id', postId);  
-    				res.status(201).json({
-    					status: 'new Post is created'
-    				}); 
-    		  	}).catch(function(err){
-    				console.log('While saving new post an error occured'); 
-    				throw new Error(err); 
-    		  	}); 
-    	})
-    	.catch(function(err){
-    		console.log('ERR', err); 
-    		res.status(500).json({
-    			error: 'internal db error occured'
-    		}); 
-    	})
-
-}); 
 
 module.exports = api; 
